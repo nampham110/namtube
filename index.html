@@ -1,37 +1,108 @@
-from flask import Flask, request, jsonify
-from youtube_transcript_api import YouTubeTranscriptApi
-from deep_translator import GoogleTranslator
-import os
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>NamTube Translator</title>
+<style>
+body { font-family: Arial; padding: 20px; }
+#subtitles div { padding: 10px; margin-bottom: 5px; }
+</style>
+</head>
+<body>
 
-app = Flask(__name__)
+<h2>NamTube Translator</h2>
 
-@app.route("/")
-def home():
-    with open("index.html", "r", encoding="utf-8") as f:
-        return f.read()
+<input id="ytlink" placeholder="Dán link YouTube ở đây" style="width:60%;">
+<button onclick="loadVideo()">Load</button>
 
-@app.route("/transcript")
-def transcript():
-    video_id = request.args.get("id")
-    transcript = YouTubeTranscriptApi.get_transcript(video_id)
+<div id="player" style="margin-top:20px;"></div>
 
-    result = []
+<h3>Phụ đề song ngữ</h3>
+<div id="subtitles"></div>
 
-    for line in transcript:
-        translated = GoogleTranslator(
-            source='auto',
-            target='vi'
-        ).translate(line['text'])
+<script src="https://www.youtube.com/iframe_api"></script>
 
-        result.append({
-            "original": line['text'],
-            "translated": translated,
-            "start": line['start'],
-            "duration": line['duration']
-        })
+<script>
+let player;
+let transcriptData = [];
 
-    return jsonify(result)
+function getVideoID(url) {
+  const regExp = /(?:v=|youtu\.be\/)([^&]+)/;
+  const match = url.match(regExp);
+  return match ? match[1] : null;
+}
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+function loadVideo() {
+  const link = document.getElementById("ytlink").value;
+  const id = getVideoID(link);
+
+  if (!id) {
+    alert("Link không hợp lệ");
+    return;
+  }
+
+  fetch(`/transcript?id=${id}`)
+    .then(res => res.json())
+    .then(data => {
+
+      if (data.error) {
+        alert("Video không có phụ đề.");
+        return;
+      }
+
+      transcriptData = data;
+      renderTranscript();
+    });
+
+  player = new YT.Player('player', {
+    height: '360',
+    width: '100%',
+    videoId: id,
+    events: {
+      'onReady': onPlayerReady
+    }
+  });
+}
+
+function onPlayerReady() {
+  setInterval(syncSubtitle, 500);
+}
+
+function renderTranscript() {
+  const container = document.getElementById("subtitles");
+  container.innerHTML = "";
+
+  transcriptData.forEach((line, index) => {
+    const div = document.createElement("div");
+    div.id = "line-" + index;
+    div.innerHTML = `
+      <b>${line.original}</b><br>
+      <span style="color:gray">${line.translated}</span>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function syncSubtitle() {
+  if (!player || !player.getCurrentTime) return;
+
+  const currentTime = player.getCurrentTime();
+
+  transcriptData.forEach((line, index) => {
+    const element = document.getElementById("line-" + index);
+
+    if (
+      currentTime >= line.start &&
+      currentTime <= line.start + line.duration
+    ) {
+      element.style.background = "#ffe58a";
+      element.scrollIntoView({behavior: "smooth", block: "center"});
+    } else {
+      element.style.background = "transparent";
+    }
+  });
+}
+</script>
+
+</body>
+</html>
