@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>NamTube</title>
+</head>
+<body>
+
+<h2>NamTube Translator</h2>
+
+<input id="ytlink" placeholder="Dán link YouTube">
+<button onclick="loadVideo()">Load</button>
+
+<div id="player"></div>
+<div id="subtitles"></div>
+
+<script>
+function getVideoID(url) {
+  const regExp = /v=([^&]+)/;
+  const match = url.match(regExp);
+  return match ? match[1] : null;
+}
+
+function loadVideo() {
+  const link = document.getElementById("ytlink").value;
+  const id = getVideoID(link);
+
+  document.getElementById("player").innerHTML =
+    `<iframe width="100%" height="300"
+    src="https://www.youtube.com/embed/${id}"
+    allowfullscreen></iframe>`;
+
+  fetch(`/transcript?id=${id}`)
+    .then(res => res.json())
+    .then(data => {
+      const container = document.getElementById("subtitles");
+      container.innerHTML = "";
+      data.forEach(line => {
+        container.innerHTML += `
+          <p><b>${line.original}</b><br>${line.translated}</p>`;
+      });
+    });
+}
+</script>
+
+</body>
+</html>
