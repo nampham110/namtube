@@ -16,7 +16,7 @@
 
 <script>
 function getVideoID(url) {
-  const regExp = /v=([^&]+)/;
+  const regExp = /(?:v=|youtu\.be\/)([^&]+)/;
   const match = url.match(regExp);
   return match ? match[1] : null;
 }
