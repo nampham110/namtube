@@ -1,4 +1,0 @@
-flask
-youtube-transcript-api
-deep-translator
-gunicorn
