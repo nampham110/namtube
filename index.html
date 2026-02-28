@@ -1,20 +1,9 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>NamTube</title>
-</head>
-<body>
-
-<h2>NamTube Translator</h2>
-
-<input id="ytlink" placeholder="Dán link YouTube">
-<button onclick="loadVideo()">Load</button>
-
-<div id="player"></div>
-<div id="subtitles"></div>
+<script src="https://www.youtube.com/iframe_api"></script>
 
 <script>
+let player;
+let transcriptData = [];
+
 function getVideoID(url) {
   const regExp = /(?:v=|youtu\.be\/)([^&]+)/;
   const match = url.match(regExp);
@@ -25,23 +14,65 @@ function loadVideo() {
   const link = document.getElementById("ytlink").value;
   const id = getVideoID(link);
 
-  document.getElementById("player").innerHTML =
-    `<iframe width="100%" height="300"
-    src="https://www.youtube.com/embed/${id}"
-    allowfullscreen></iframe>`;
-
   fetch(`/transcript?id=${id}`)
     .then(res => res.json())
-    .then(data => {
-      const container = document.getElementById("subtitles");
-      container.innerHTML = "";
-      data.forEach(line => {
-        container.innerHTML += `
-          <p><b>${line.original}</b><br>${line.translated}</p>`;
-      });
+    .then(response => {
+
+      if (response.error) {
+        alert("Video không có phụ đề công khai.");
+        return;
+      }
+
+      transcriptData = response.data;
+      renderTranscript();
     });
+
+  player = new YT.Player('player', {
+    height: '300',
+    width: '100%',
+    videoId: id,
+    events: {
+      'onReady': onPlayerReady
+    }
+  });
+}
+
+function onPlayerReady() {
+  setInterval(syncSubtitle, 500);
+}
+
+function renderTranscript() {
+  const container = document.getElementById("subtitles");
+  container.innerHTML = "";
+
+  transcriptData.forEach((line, index) => {
+    const div = document.createElement("div");
+    div.id = "line-" + index;
+    div.innerHTML = `
+      <b>${line.original}</b><br>
+      <span style="color:gray">${line.translated}</span><hr>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function syncSubtitle() {
+  if (!player || !player.getCurrentTime) return;
+
+  const currentTime = player.getCurrentTime();
+
+  transcriptData.forEach((line, index) => {
+    const element = document.getElementById("line-" + index);
+
+    if (
+      currentTime >= line.start &&
+      currentTime <= line.start + line.duration
+    ) {
+      element.style.background = "#ffe58a";
+      element.scrollIntoView({behavior: "smooth", block: "center"});
+    } else {
+      element.style.background = "transparent";
+    }
+  });
 }
 </script>
-
-</body>
-</html>
