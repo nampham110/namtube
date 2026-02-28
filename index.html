@@ -1,78 +1,37 @@
-<script src="https://www.youtube.com/iframe_api"></script>
+from flask import Flask, request, jsonify
+from youtube_transcript_api import YouTubeTranscriptApi
+from deep_translator import GoogleTranslator
+import os
 
-<script>
-let player;
-let transcriptData = [];
+app = Flask(__name__)
 
-function getVideoID(url) {
-  const regExp = /(?:v=|youtu\.be\/)([^&]+)/;
-  const match = url.match(regExp);
-  return match ? match[1] : null;
-}
+@app.route("/")
+def home():
+    with open("index.html", "r", encoding="utf-8") as f:
+        return f.read()
 
-function loadVideo() {
-  const link = document.getElementById("ytlink").value;
-  const id = getVideoID(link);
+@app.route("/transcript")
+def transcript():
+    video_id = request.args.get("id")
+    transcript = YouTubeTranscriptApi.get_transcript(video_id)
 
-  fetch(`/transcript?id=${id}`)
-    .then(res => res.json())
-    .then(response => {
+    result = []
 
-      if (response.error) {
-        alert("Video không có phụ đề công khai.");
-        return;
-      }
+    for line in transcript:
+        translated = GoogleTranslator(
+            source='auto',
+            target='vi'
+        ).translate(line['text'])
 
-      transcriptData = response.data;
-      renderTranscript();
-    });
+        result.append({
+            "original": line['text'],
+            "translated": translated,
+            "start": line['start'],
+            "duration": line['duration']
+        })
 
-  player = new YT.Player('player', {
-    height: '300',
-    width: '100%',
-    videoId: id,
-    events: {
-      'onReady': onPlayerReady
-    }
-  });
-}
+    return jsonify(result)
 
-function onPlayerReady() {
-  setInterval(syncSubtitle, 500);
-}
-
-function renderTranscript() {
-  const container = document.getElementById("subtitles");
-  container.innerHTML = "";
-
-  transcriptData.forEach((line, index) => {
-    const div = document.createElement("div");
-    div.id = "line-" + index;
-    div.innerHTML = `
-      <b>${line.original}</b><br>
-      <span style="color:gray">${line.translated}</span><hr>
-    `;
-    container.appendChild(div);
-  });
-}
-
-function syncSubtitle() {
-  if (!player || !player.getCurrentTime) return;
-
-  const currentTime = player.getCurrentTime();
-
-  transcriptData.forEach((line, index) => {
-    const element = document.getElementById("line-" + index);
-
-    if (
-      currentTime >= line.start &&
-      currentTime <= line.start + line.duration
-    ) {
-      element.style.background = "#ffe58a";
-      element.scrollIntoView({behavior: "smooth", block: "center"});
-    } else {
-      element.style.background = "transparent";
-    }
-  });
-}
-</script>
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
