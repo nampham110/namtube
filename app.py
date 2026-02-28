@@ -1,35 +1,48 @@
 from flask import Flask, request, jsonify
-from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
 from deep_translator import GoogleTranslator
 import os
 
 app = Flask(__name__)
 
+# Serve index.html
 @app.route("/")
 def home():
-    return "<h1>NamTube is running</h1>"
+    with open("index.html", "r", encoding="utf-8") as f:
+        return f.read()
 
+# API lấy transcript
 @app.route("/transcript")
 def transcript():
     video_id = request.args.get("id")
-    transcript = YouTubeTranscriptApi.get_transcript(video_id)
 
-    result = []
+    try:
+        transcript_data = YouTubeTranscriptApi.get_transcript(video_id)
 
-    for line in transcript:
-        translated = GoogleTranslator(
-            source='auto',
-            target='vi'
-        ).translate(line['text'])
+        result = []
 
-        result.append({
-            "original": line['text'],
-            "translated": translated,
-            "start": line['start'],
-            "duration": line['duration']
-        })
+        for line in transcript_data:
+            original = line["text"]
 
-    return jsonify(result)
+            translated = GoogleTranslator(
+                source="auto",
+                target="vi"
+            ).translate(original)
+
+            result.append({
+                "original": original,
+                "translated": translated,
+                "start": line["start"],
+                "duration": line["duration"]
+            })
+
+        return jsonify(result)
+
+    except TranscriptsDisabled:
+        return jsonify({"error": "Transcript disabled"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
