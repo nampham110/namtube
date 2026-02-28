@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BiLiWeb - Bilingual YouTube Player</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #0d0d0f;
+    --surface: #16161a;
+    --surface2: #1e1e24;
+    --border: #2a2a35;
+    --accent: #f5a623;
+    --accent2: #4ecdc4;
+    --text: #e8e8f0;
+    --text-dim: #888899;
+    --active-row: rgba(245, 166, 35, 0.12);
+    --active-border: #f5a623;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── TOP BAR ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -1px;
+    flex-shrink: 0;
+  }
+  .logo span { color: var(--accent2); }
+
+  .url-bar {
+    flex: 1;
+    display: flex;
+    gap: 8px;
+  }
+
+  .url-bar input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 14px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .url-bar input:focus { border-color: var(--accent); }
+  .url-bar input::placeholder { color: var(--text-dim); }
+
+  .btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 18px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity .2s, transform .1s;
+    flex-shrink: 0;
+  }
+  .btn:hover { opacity: .85; }
+  .btn:active { transform: scale(.97); }
+  .btn.secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .main {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: calc(100vh - 57px);
+  }
+
+  .player-section {
+    position: relative;
+    background: #000;
+  }
+
+  /* Subtitle overlay */
+  .subtitle-overlay {
+    position: absolute;
+    bottom: 48px;
+    left: 0; right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+    z-index: 10;
+    padding: 0 24px;
+  }
+
+  .sub-line {
+    text-align: center;
+    padding: 4px 16px;
+    border-radius: 4px;
+    max-width: 90%;
+    line-height: 1.5;
+  }
+  .sub-line.src {
+    font-size: clamp(14px, 2vw, 20px);
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 1px 6px #000, 0 0 12px #000;
+    background: rgba(0,0,0,.55);
+    margin-bottom: 4px;
+  }
+  .sub-line.tgt {
+    font-size: clamp(13px, 1.8vw, 18px);
+    font-weight: 400;
+    color: var(--accent);
+    text-shadow: 0 1px 4px #000;
+    background: rgba(0,0,0,.45);
+  }
+
+  #yt-player {
+    width: 100%;
+    aspect-ratio: 16/9;
+    max-height: 42vh;
+    display: block;
+  }
+
+  /* ── PANEL BELOW ── */
+  .bottom-panel {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* Transcript */
+  .transcript-wrap {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .panel-header h3 {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+  }
+
+  .lang-selects {
+    display: flex;
+    gap: 6px;
+  }
+
+  .lang-select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: var(--text);
+    font-size: 0.75rem;
+    cursor: pointer;
+    outline: none;
+  }
+  .lang-select:focus { border-color: var(--accent); }
+
+  .transcript-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+    scroll-behavior: smooth;
+  }
+  .transcript-list::-webkit-scrollbar { width: 4px; }
+  .transcript-list::-webkit-scrollbar-track { background: transparent; }
+  .transcript-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .transcript-row {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: 12px;
+    padding: 10px 16px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background .15s, border-color .15s;
+    position: relative;
+  }
+  .transcript-row:hover { background: rgba(255,255,255,.03); }
+  .transcript-row.active {
+    background: var(--active-row);
+    border-left-color: var(--active-border);
+  }
+
+  .t-time {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    padding-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .t-content {}
+  .t-src {
+    font-size: 0.85rem;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .t-tgt {
+    font-size: 0.8rem;
+    color: var(--accent);
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+
+  /* Right: Settings + Word panel */
+  .side-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .settings-panel {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .settings-panel h3 {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .setting-row label {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+  }
+
+  .toggle {
+    position: relative;
+    width: 36px; height: 20px;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle .slider {
+    position: absolute;
+    inset: 0;
+    background: var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .toggle .slider::before {
+    content: '';
+    position: absolute;
+    width: 14px; height: 14px;
+    left: 3px; top: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: transform .2s;
+  }
+  .toggle input:checked + .slider { background: var(--accent); }
+  .toggle input:checked + .slider::before { transform: translateX(16px); }
+
+  .word-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+  }
+  .word-panel h3 {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+
+  .word-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+    animation: fadeIn .3s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  .word-card .w-word {
+    font-family: 'Space Mono', monospace;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent2);
+  }
+  .word-card .w-phonetic { font-size: 0.75rem; color: var(--text-dim); margin: 2px 0 4px; }
+  .word-card .w-def { font-size: 0.8rem; color: var(--text); line-height: 1.5; }
+  .word-card .w-ex { font-size: 0.75rem; color: var(--text-dim); margin-top: 6px; font-style: italic; }
+
+  /* Loading / empty */
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-dim);
+    text-align: center;
+    gap: 8px;
+    padding: 20px;
+  }
+  .empty .icon { font-size: 2.5rem; opacity: .3; }
+  .empty p { font-size: 0.82rem; line-height: 1.6; }
+
+  .loader {
+    display: none;
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading .loader { display: block; }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    .bottom-panel { grid-template-columns: 1fr; }
+    .side-panel { display: none; }
+  }
+
+  /* Highlight clickable word */
+  .t-src .word-clickable {
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background .15s;
+    padding: 0 1px;
+  }
+  .t-src .word-clickable:hover { background: rgba(78,205,196,.2); color: var(--accent2); }
+
+  /* Speed control */
+  .speed-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 8px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: border-color .2s;
+  }
+  .speed-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .speed-btn.active { border-color: var(--accent); color: var(--accent); }
+
+  .speed-row { display: flex; gap: 4px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Bili<span>Web</span></div>
+  <div class="url-bar">
+    <input type="text" id="yt-url" placeholder="Paste YouTube URL or Video ID..." />
+    <button class="btn" onclick="loadVideo()">LOAD</button>
+  </div>
+  <div class="loader" id="main-loader"></div>
+</header>
+
+<div class="main">
+  <div class="player-section" id="player-section">
+    <div id="yt-player"></div>
+    <div class="subtitle-overlay" id="subtitle-overlay">
+      <div class="sub-line src" id="sub-src"></div>
+      <div class="sub-line tgt" id="sub-tgt"></div>
+    </div>
+  </div>
+
+  <div class="bottom-panel">
+    <div class="transcript-wrap">
+      <div class="panel-header">
+        <h3>TRANSCRIPT</h3>
+        <div class="lang-selects">
+          <select class="lang-select" id="src-lang">
+            <option value="en">🇺🇸 English</option>
+            <option value="ja">🇯🇵 Japanese</option>
+            <option value="ko">🇰🇷 Korean</option>
+            <option value="zh">🇨🇳 Chinese</option>
+            <option value="fr">🇫🇷 French</option>
+            <option value="de">🇩🇪 German</option>
+            <option value="es">🇪🇸 Spanish</option>
+          </select>
+          <select class="lang-select" id="tgt-lang">
+            <option value="vi">🇻🇳 Vietnamese</option>
+            <option value="en">🇺🇸 English</option>
+            <option value="zh">🇨🇳 Chinese</option>
+            <option value="ko">🇰🇷 Korean</option>
+            <option value="ja">🇯🇵 Japanese</option>
+            <option value="fr">🇫🇷 French</option>
+            <option value="de">🇩🇪 German</option>
+          </select>
+        </div>
+      </div>
+      <div class="transcript-list" id="transcript-list">
+        <div class="empty">
+          <div class="icon">▶</div>
+          <p>Paste a YouTube URL above<br>to load video with bilingual subtitles</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-panel">
+      <div class="settings-panel">
+        <h3>SETTINGS</h3>
+        <div class="setting-row">
+          <label>Show Translation</label>
+          <label class="toggle"><input type="checkbox" id="show-tgt" checked><span class="slider"></span></label>
+        </div>
+        <div class="setting-row">
+          <label>Auto-scroll</label>
+          <label class="toggle"><input type="checkbox" id="auto-scroll" checked><span class="slider"></span></label>
+        </div>
+        <div class="setting-row">
+          <label>Show Subtitles</label>
+          <label class="toggle"><input type="checkbox" id="show-subs" checked><span class="slider"></span></label>
+        </div>
+        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+          <label>Playback Speed</label>
+          <div class="speed-row" id="speed-row">
+            <button class="speed-btn" onclick="setSpeed(0.5)">0.5×</button>
+            <button class="speed-btn" onclick="setSpeed(0.75)">0.75×</button>
+            <button class="speed-btn active" onclick="setSpeed(1)">1×</button>
+            <button class="speed-btn" onclick="setSpeed(1.25)">1.25×</button>
+            <button class="speed-btn" onclick="setSpeed(1.5)">1.5×</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="word-panel">
+        <h3>WORD LOOKUP</h3>
+        <div id="word-cards">
+          <p style="font-size:.78rem;color:var(--text-dim);line-height:1.6;">Click any word in the transcript to look it up here.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- YouTube IFrame API -->
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+// ── State ──
+let player = null;
+let captions = []; // [{start, end, src, tgt}]
+let currentIdx = -1;
+let rafId = null;
+let playerReady = false;
+let pendingVideoId = null;
+
+// ── YouTube API ──
+function onYouTubeIframeAPIReady() {
+  player = new YT.Player('yt-player', {
+    height: '100%',
+    width: '100%',
+    videoId: '',
+    playerVars: { rel: 0, modestbranding: 1, cc_load_policy: 0, iv_load_policy: 3 },
+    events: {
+      onReady: () => {
+        playerReady = true;
+        if (pendingVideoId) { player.loadVideoById(pendingVideoId); pendingVideoId = null; }
+      },
+      onStateChange: (e) => {
+        if (e.data === YT.PlayerState.PLAYING) startLoop();
+        else stopLoop();
+      }
+    }
+  });
+}
+
+function startLoop() {
+  if (rafId) return;
+  function loop() {
+    if (!player || !player.getCurrentTime) { rafId = null; return; }
+    const t = player.getCurrentTime();
+    updateSubtitles(t);
+    rafId = requestAnimationFrame(loop);
+  }
+  rafId = requestAnimationFrame(loop);
+}
+
+function stopLoop() {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+}
+
+// ── Extract Video ID ──
+function extractVideoId(url) {
+  const patterns = [
+    /(?:v=|\/embed\/|youtu\.be\/|\/v\/|\/shorts\/)([A-Za-z0-9_-]{11})/,
+    /^([A-Za-z0-9_-]{11})$/
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// ── Load Video ──
+async function loadVideo() {
+  const url = document.getElementById('yt-url').value.trim();
+  if (!url) return;
+  const vid = extractVideoId(url);
+  if (!vid) { alert('Invalid YouTube URL or Video ID'); return; }
+
+  setLoading(true);
+  captions = [];
+  currentIdx = -1;
+  document.getElementById('transcript-list').innerHTML = '<div class="empty"><div class="loader" style="display:block;margin:auto"></div></div>';
+  clearSubtitles();
+
+  if (playerReady) player.loadVideoById(vid);
+  else pendingVideoId = vid;
+
+  try {
+    await loadCaptions(vid);
+  } catch (e) {
+    document.getElementById('transcript-list').innerHTML = `<div class="empty"><div class="icon">⚠️</div><p>${e.message}</p></div>`;
+  }
+  setLoading(false);
+}
+
+function setLoading(v) {
+  document.getElementById('main-loader').style.display = v ? 'block' : 'none';
+}
+
+// ── Fetch Captions via proxy ──
+// We use the youtube-transcript-api via a public proxy
+async function loadCaptions(videoId) {
+  const srcLang = document.getElementById('src-lang').value;
+  const tgtLang = document.getElementById('tgt-lang').value;
+
+  // Fetch transcript using the Invidious API (public instance)
+  // Try multiple instances
+  const instances = [
+    `https://inv.nadeko.net/api/v1/captions/${videoId}`,
+    `https://invidious.fdn.fr/api/v1/captions/${videoId}`,
+    `https://yt.artemislena.eu/api/v1/captions/${videoId}`,
+  ];
+
+  let captionList = null;
+  let lastErr = '';
+
+  for (const url of instances) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      captionList = data.captions || [];
+      break;
+    } catch (e) { lastErr = e.message; }
+  }
+
+  if (!captionList) throw new Error(`Could not fetch captions. ${lastErr}\n\nNote: Some videos have no subtitles, or the proxy may be down. Try another video.`);
+
+  // Find best matching caption track
+  const findTrack = (lang) => captionList.find(c => c.language_code === lang || c.language_code?.startsWith(lang))
+    || captionList.find(c => c.language_code === 'en')
+    || captionList[0];
+
+  const srcTrack = findTrack(srcLang);
+  if (!srcTrack) throw new Error('No subtitles available for this video.');
+
+  // Fetch the VTT/XML
+  const srcCaps = await fetchTrack(srcTrack.url);
+
+  // Build captions array (src only first)
+  captions = srcCaps;
+
+  renderTranscript(captions, false);
+  translateCaptions(tgtLang, captions);
+}
+
+async function fetchTrack(url) {
+  // Invidious caption URLs are absolute
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  const text = await res.text();
+  return parseVTT(text);
+}
+
+function parseVTT(text) {
+  const lines = text.split('\n');
+  const result = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    // Timestamp line
+    const m = line.match(/(\d+:\d+(?::\d+)?[.,]\d+)\s*-->\s*(\d+:\d+(?::\d+)?[.,]\d+)/);
+    if (m) {
+      const start = parseTime(m[1]);
+      const end = parseTime(m[2]);
+      i++;
+      let txt = '';
+      while (i < lines.length && lines[i].trim() !== '') {
+        txt += (txt ? ' ' : '') + lines[i].trim().replace(/<[^>]+>/g, '');
+        i++;
+      }
+      if (txt) result.push({ start, end, src: txt, tgt: '' });
+    } else { i++; }
+  }
+  return result;
+}
+
+function parseTime(s) {
+  s = s.replace(',', '.');
+  const parts = s.split(':').map(Number);
+  if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+  if (parts.length === 2) return parts[0]*60 + parts[1];
+  return parts[0];
+}
+
+// ── Translate using Google Translate (unofficial) ──
+async function translateCaptions(tgtLang, caps) {
+  if (tgtLang === document.getElementById('src-lang').value) {
+    // Same language - no translation needed
+    caps.forEach(c => c.tgt = c.src);
+    renderTranscript(caps, true);
+    return;
+  }
+
+  // Batch translate in chunks of 5 sentences
+  const chunkSize = 5;
+  for (let i = 0; i < caps.length; i += chunkSize) {
+    const chunk = caps.slice(i, i + chunkSize);
+    const combined = chunk.map(c => c.src).join('\n||||\n');
+    try {
+      const translated = await googleTranslate(combined, tgtLang);
+      const parts = translated.split('||||').map(s => s.trim());
+      chunk.forEach((c, j) => { c.tgt = parts[j] || c.src; });
+    } catch {
+      chunk.forEach(c => c.tgt = '');
+    }
+    renderTranscript(caps, true);
+    await sleep(80);
+  }
+}
+
+async function googleTranslate(text, target) {
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${target}&dt=t&q=${encodeURIComponent(text)}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return data[0].map(x => x[0]).join('');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Render Transcript ──
+function renderTranscript(caps, withTgt) {
+  const list = document.getElementById('transcript-list');
+  const showTgt = document.getElementById('show-tgt').checked;
+  list.innerHTML = '';
+  caps.forEach((cap, idx) => {
+    const row = document.createElement('div');
+    row.className = 'transcript-row' + (idx === currentIdx ? ' active' : '');
+    row.dataset.idx = idx;
+    row.onclick = () => {
+      if (player && player.seekTo) player.seekTo(cap.start, true);
+      if (player && player.playVideo) player.playVideo();
+    };
+
+    const words = cap.src.split(' ').map(w => {
+      const clean = w.replace(/[^a-zA-Z'-]/g, '');
+      if (clean.length < 2) return w;
+      return `<span class="word-clickable" onclick="lookupWord(event,'${clean}')">${w}</span>`;
+    }).join(' ');
+
+    row.innerHTML = `
+      <div class="t-time">${formatTime(cap.start)}</div>
+      <div class="t-content">
+        <div class="t-src">${words}</div>
+        ${showTgt && withTgt && cap.tgt ? `<div class="t-tgt">${cap.tgt}</div>` : ''}
+      </div>`;
+    list.appendChild(row);
+  });
+}
+
+function formatTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+// ── Subtitle Sync ──
+function updateSubtitles(t) {
+  let idx = -1;
+  for (let i = 0; i < captions.length; i++) {
+    if (t >= captions[i].start && t < captions[i].end) { idx = i; break; }
+  }
+
+  if (idx === currentIdx) return;
+  currentIdx = idx;
+
+  const showSubs = document.getElementById('show-subs').checked;
+  const showTgt = document.getElementById('show-tgt').checked;
+
+  if (idx >= 0 && showSubs) {
+    const cap = captions[idx];
+    document.getElementById('sub-src').textContent = cap.src;
+    document.getElementById('sub-tgt').textContent = showTgt ? (cap.tgt || '') : '';
+  } else {
+    clearSubtitles();
+  }
+
+  // Highlight row + auto-scroll
+  document.querySelectorAll('.transcript-row').forEach(r => r.classList.remove('active'));
+  if (idx >= 0) {
+    const row = document.querySelector(`.transcript-row[data-idx="${idx}"]`);
+    if (row) {
+      row.classList.add('active');
+      if (document.getElementById('auto-scroll').checked) {
+        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }
+}
+
+function clearSubtitles() {
+  document.getElementById('sub-src').textContent = '';
+  document.getElementById('sub-tgt').textContent = '';
+}
+
+// ── Speed ──
+function setSpeed(s) {
+  if (player && player.setPlaybackRate) player.setPlaybackRate(s);
+  document.querySelectorAll('.speed-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent === s + '×');
+  });
+}
+
+// ── Word Lookup ──
+async function lookupWord(e, word) {
+  e.stopPropagation();
+  if (!word) return;
+  const panel = document.getElementById('word-cards');
+  panel.innerHTML = `<div style="display:flex;justify-content:center;padding:20px"><div class="loader" style="display:block"></div></div>`;
+  try {
+    const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
+    const data = await res.json();
+    const entry = data[0];
+    const meanings = entry.meanings?.slice(0,2) || [];
+    let html = `<div class="word-card">
+      <div class="w-word">${entry.word}</div>
+      <div class="w-phonetic">${entry.phonetic || entry.phonetics?.find(p=>p.text)?.text || ''}</div>`;
+    meanings.forEach(m => {
+      const def = m.definitions[0];
+      html += `<div class="w-def"><b>${m.partOfSpeech}:</b> ${def.definition}</div>`;
+      if (def.example) html += `<div class="w-ex">"${def.example}"</div>`;
+    });
+    html += `</div>`;
+    panel.innerHTML = html;
+  } catch {
+    panel.innerHTML = `<div class="word-card"><div class="w-word">${word}</div><div class="w-def">Definition not found.</div></div>`;
+  }
+}
+
+// ── Toggle handlers ──
+document.getElementById('show-tgt').addEventListener('change', () => {
+  renderTranscript(captions, true);
+});
+document.getElementById('show-subs').addEventListener('change', (e) => {
+  if (!e.target.checked) clearSubtitles();
+});
+
+// ── Enter key ──
+document.getElementById('yt-url').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadVideo();
+});
+
+// ── Pre-load demo ──
+window.addEventListener('load', () => {
+  const params = new URLSearchParams(location.search);
+  const v = params.get('v');
+  if (v) {
+    document.getElementById('yt-url').value = v;
+    loadVideo();
+  }
+});
+</script>
+</body>
+</html
